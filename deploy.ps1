@@ -47,12 +47,20 @@ foreach ($ns in @('Microsoft.ContainerService','Microsoft.ApiManagement','Micros
 # ================================
 Write-Host "Checking AKS..."
 
-$AKS_EXISTS = az aks show `
+# Se consulta el ESTADO, no la existencia: un recurso en 'Failed' existe pero
+# no sirve, y preguntar solo por el nombre lo daria por bueno.
+$AKS_STATE = az aks show `
   --resource-group $RG `
   --name $AKS_NAME `
-  --query name -o tsv 2>$null
+  --query provisioningState -o tsv 2>$null
 
-if (-not $AKS_EXISTS) {
+if ($AKS_STATE -eq 'Failed') {
+  Write-Host "AKS $AKS_NAME is in 'Failed' state. Deleting before recreate..."
+  az aks delete --resource-group $RG --name $AKS_NAME --yes --only-show-errors
+  $AKS_STATE = $null
+}
+
+if ($AKS_STATE -ne 'Succeeded') {
   Write-Host "Creating AKS $AKS_NAME..."
 
   az aks create `
@@ -73,7 +81,7 @@ if (-not $AKS_EXISTS) {
     exit 1
   }
 } else {
-  Write-Host "AKS $AKS_NAME already exists"
+  Write-Host "AKS $AKS_NAME already exists (state: Succeeded)"
 }
 
 Write-Host "Waiting for AKS to be ready..."
@@ -93,13 +101,22 @@ az aks show --resource-group $RG --name $AKS_NAME --query fqdn -o tsv
 # ================================
 Write-Host "Checking Cosmos DB (Mongo API)..."
 
-$COSMOS_EXISTS = az cosmosdb show `
+# Mismo criterio que en AKS: se valida el estado del aprovisionamiento.
+# Una cuenta en 'Failed' reserva el nombre y hace fallar 'az cosmosdb keys list'
+# mas adelante, con un error que no apunta a la causa real.
+$COSMOS_STATE = az cosmosdb show `
   --name $COSMOS_ACCOUNT `
   --resource-group $RG `
-  --query name -o tsv 2>$null
+  --query provisioningState -o tsv 2>$null
 
-if (-not $COSMOS_EXISTS) {
-  Write-Host "Creating Cosmos DB account $COSMOS_ACCOUNT (Mongo API)..."
+if ($COSMOS_STATE -eq 'Failed') {
+  Write-Host "Cosmos account $COSMOS_ACCOUNT is in 'Failed' state. Deleting before recreate..."
+  az cosmosdb delete --name $COSMOS_ACCOUNT --resource-group $RG --yes --only-show-errors
+  $COSMOS_STATE = $null
+}
+
+if ($COSMOS_STATE -ne 'Succeeded') {
+  Write-Host "Creating Cosmos DB account $COSMOS_ACCOUNT (Mongo API) in $COSMOS_LOC..."
 
   az cosmosdb create `
     --name $COSMOS_ACCOUNT `
@@ -108,7 +125,7 @@ if (-not $COSMOS_EXISTS) {
     --capabilities EnableMongo `
     --default-consistency-level Session `
     --enable-free-tier true `
-    --locations regionName=$LOC failoverPriority=0 `
+    --locations regionName=$COSMOS_LOC failoverPriority=0 `
     --only-show-errors `
     --output none
 
@@ -117,7 +134,7 @@ if (-not $COSMOS_EXISTS) {
     exit 1
   }
 } else {
-  Write-Host "Cosmos DB account $COSMOS_ACCOUNT already exists"
+  Write-Host "Cosmos DB account $COSMOS_ACCOUNT already exists (state: Succeeded)"
 }
 
 
