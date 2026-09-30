@@ -16,12 +16,31 @@ if (-not (az group exists --name $RG | ConvertFrom-Json)) {
 }
 
 # ================================
-# Providers (MANDATORY)
+# Providers
 # ================================
-Write-Host "Registering Azure Providers..."
-az provider register --namespace Microsoft.ContainerService --wait | Out-Null
-az provider register --namespace Microsoft.ApiManagement --wait | Out-Null
-az provider register --namespace Microsoft.DocumentDB --wait | Out-Null
+# El registro de providers es una operacion a NIVEL DE SUSCRIPCION.
+# El Service Principal de este pipeline esta acotado al resource group,
+# por lo que no tiene permiso para ejecutarla y el script fallaria aqui.
+#
+# Los providers se registran UNA SOLA VEZ de forma manual, con una cuenta
+# con permisos sobre la suscripcion:
+#
+#   az provider register --namespace Microsoft.ContainerService
+#   az provider register --namespace Microsoft.ApiManagement
+#   az provider register --namespace Microsoft.DocumentDB
+#
+# Verificacion:
+#   az provider show --namespace <ns> --query registrationState -o tsv
+#
+Write-Host "Verifying Azure Providers..."
+foreach ($ns in @('Microsoft.ContainerService','Microsoft.ApiManagement','Microsoft.DocumentDB')) {
+  $state = az provider show --namespace $ns --query registrationState -o tsv 2>$null
+  if ($state -ne 'Registered') {
+    Write-Error "Provider $ns is '$state', expected 'Registered'. Register it manually with an account that has subscription-level permissions."
+    exit 1
+  }
+  Write-Host "  $ns : Registered"
+}
 
 # ================================
 # AKS (HARD FAIL)
