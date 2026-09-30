@@ -9,7 +9,7 @@ $AKS_NODE_COUNT = 1
 # APIM
 $APIM_NAME = "apim-cardops-demo"
 
-$SUBSCRIPTION_ID = "4a42d9ba-d900-40bd-93ea-6e3548f68daa"
+$SUBSCRIPTION_ID = az account show --query id -o tsv
 
 # COSMOS (Mongo API)
 $COSMOS_ACCOUNT = "cosmos-cardops-demo"   # unico en Azure
